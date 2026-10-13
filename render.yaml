@@ -1,0 +1,86 @@
+services:
+  - type: web
+    name: campovital-magdalena-auth
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile-auth-service
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: 2
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: AGRO_SERVICE_URL
+        value: https://campovital-magdalena-agro.onrender.com
+
+  - type: web
+    name: campovital-magdalena-agro
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile-agro-service
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: 2
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+
+  - type: web
+    name: campovital-magdalena-recommendations
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile-recommendations-service
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_POOL_SIZE
+        value: 2
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: AGRO_SERVICE_URL
+        value: https://campovital-magdalena-agro.onrender.com
+
+  - type: web
+    name: campovital-magdalena-gateway
+    runtime: docker
+    plan: free
+    region: ohio
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile-api-gateway
+    envVars:
+      - key: JWT_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: AUTH_SERVICE_URL
+        value: https://campovital-magdalena-auth.onrender.com
+      - key: AGRO_SERVICE_URL
+        value: https://campovital-magdalena-agro.onrender.com
+      - key: RECOMMENDATIONS_SERVICE_URL
+        value: https://campovital-magdalena-recommendations.onrender.com

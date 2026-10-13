@@ -2,9 +2,12 @@ spring:
   application:
     name: recommendations-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/db_recomendaciones
-    username: postgres
-    password: 123456
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/db_recomendaciones}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:3}
+      minimum-idle: 0
   jpa:
     hibernate:
       ddl-auto: update
@@ -15,12 +18,14 @@ spring:
         time_zone: America/Bogota
 
 server:
-  port: 8083
+  port: ${PORT:8083}
   servlet:
     context-path: /api
 
 app:
+  cors:
+    allowed-origin: ${FRONTEND_ORIGIN:http://localhost:5173}
   jwt:
-    secret: s3cr3tK3yAgr0Sm4rtM4gd4l3n4Pr0duct0r3s2024xYz!@#
+    secret: ${JWT_SECRET}
   agro-service:
-    url: http://localhost:8082
+    url: ${AGRO_SERVICE_URL:http://localhost:8082}
