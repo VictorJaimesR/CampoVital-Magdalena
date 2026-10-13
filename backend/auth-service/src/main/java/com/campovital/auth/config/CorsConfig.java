@@ -1,5 +1,6 @@
 package com.campovital.auth.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -8,21 +9,17 @@ import org.springframework.web.filter.CorsFilter;
 
 import java.util.Arrays;
 
-/**
- * Configuración CORS para permitir peticiones cross-origin
- * desde el frontend React (desarrollo local y producción).
- */
 @Configuration
 public class CorsConfig {
+
+    @Value("${app.cors.allowed-origin}")
+    private String allowedOrigin;
 
     @Bean
     public CorsFilter corsFilter() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true);
-        config.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173",  // Vite dev server
-                "http://localhost:3000"   // Alternativa
-        ));
+        config.setAllowedOrigins(Arrays.asList(allowedOrigin));
         config.setAllowedHeaders(Arrays.asList(
                 "Origin", "Content-Type", "Accept", "Authorization",
                 "X-Requested-With", "Access-Control-Request-Method",
