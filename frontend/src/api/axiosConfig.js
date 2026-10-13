@@ -7,7 +7,7 @@ const API_BASE = '/api';
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 90000,
 });
 
 // Interceptor: agregar JWT a cada request
