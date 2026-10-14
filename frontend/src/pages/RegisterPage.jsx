@@ -34,7 +34,7 @@ export default function RegisterPage() {
       <div className="login-card" style={{ maxWidth: 480 }}>
         <div className="login-logo">🌱</div>
         <h1 className="login-title">Crear Cuenta</h1>
-        <p className="login-subtitle">Únase a AgroSmart Magdalena</p>
+        <p className="login-subtitle">Únase a CampoVital Magdalena</p>
 
         {error && <div className="alert alert-danger py-2 small">{error}</div>}
 
