@@ -17,6 +17,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      offlineService.invalidateCache();
+      offlineService.setUserScope(null);
       clearAuthStorage();
       setUser(null);
     };
@@ -80,6 +82,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    offlineService.invalidateCache();
     clearAuthStorage();
     offlineService.setUserScope(null);
     setUser(null);
