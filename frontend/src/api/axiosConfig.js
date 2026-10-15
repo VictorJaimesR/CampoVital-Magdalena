@@ -44,27 +44,28 @@ const api = axios.create({
 // Reutilizar respuestas GET recientes al volver a un módulo. Las escrituras
 // invalidan el caché; una respuesta cacheada nunca extiende la sesión del JWT.
 const requestGet = api.get.bind(api);
-function refreshCacheInBackground(url, config, cacheKey) {
+function refreshCacheInBackground(url, config, cacheKey, cacheScope) {
   if (backgroundRefreshes.has(cacheKey)) return;
   const lastRefresh = lastBackgroundRefresh.get(cacheKey) || 0;
   if (Date.now() - lastRefresh < 15 * 1000) return;
 
   backgroundRefreshes.add(cacheKey);
   lastBackgroundRefresh.set(cacheKey, Date.now());
-  requestGet(url, { ...config, _offlineCacheKey: cacheKey })
+  requestGet(url, { ...config, _offlineCacheKey: cacheKey, _offlineCacheScope: cacheScope })
     .catch(() => {})
     .finally(() => backgroundRefreshes.delete(cacheKey));
 }
 
 api.get = (url, config = {}) => {
   const cacheKey = buildCacheKey(url, config.params);
+  const cacheScope = offlineService.getUserScope();
   const cacheableResponse = config.responseType !== 'blob' && config.responseType !== 'arraybuffer';
 
   if (cacheableResponse && hasUnexpiredToken()) {
-    const cached = offlineService.getCachedEntry(cacheKey);
+    const cached = offlineService.getCachedEntry(cacheKey, cacheScope);
     if (cached && Date.now() - cached.timestamp <= API_CACHE_STALE_MAX_AGE_MS) {
       if (Date.now() - cached.timestamp > API_CACHE_FRESH_MS) {
-        refreshCacheInBackground(url, config, cacheKey);
+        refreshCacheInBackground(url, config, cacheKey, cacheScope);
       }
 
       return Promise.resolve({
@@ -78,11 +79,12 @@ api.get = (url, config = {}) => {
     }
   }
 
-  return requestGet(url, { ...config, _offlineCacheKey: cacheKey });
+  return requestGet(url, { ...config, _offlineCacheKey: cacheKey, _offlineCacheScope: cacheScope });
 };
 
 // Interceptor: agregar JWT a cada request
 api.interceptors.request.use((config) => {
+  config._offlineCacheScope = offlineService.getUserScope();
   const token = getStoredAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -112,10 +114,12 @@ api.interceptors.response.use(
     if (method === 'get' && response.config.responseType !== 'blob' && response.config.responseType !== 'arraybuffer') {
       offlineService.cacheData(
         response.config._offlineCacheKey || response.config.url,
-        response.data
+        response.data,
+        response.config._offlineCacheScope
       );
-    } else if (method && method !== 'get') {
-      offlineService.invalidateCache();
+    } else if (method && method !== 'get'
+      && response.config._offlineCacheScope === offlineService.getUserScope()) {
+      offlineService.invalidateCache(response.config._offlineCacheScope);
     }
     return response;
   },
@@ -129,7 +133,9 @@ api.interceptors.response.use(
     if ((!error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')
       && requestConfig?.method === 'get') {
       const cached = offlineService.getCachedData(
-        requestConfig._offlineCacheKey || requestConfig.url
+        requestConfig._offlineCacheKey || requestConfig.url,
+        30 * 60 * 1000,
+        requestConfig._offlineCacheScope
       );
       if (cached !== null) {
         return Promise.resolve({
