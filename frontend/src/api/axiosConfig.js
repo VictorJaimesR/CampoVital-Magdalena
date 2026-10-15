@@ -45,15 +45,16 @@ const api = axios.create({
 // invalidan el caché; una respuesta cacheada nunca extiende la sesión del JWT.
 const requestGet = api.get.bind(api);
 function refreshCacheInBackground(url, config, cacheKey, cacheScope) {
-  if (backgroundRefreshes.has(cacheKey)) return;
-  const lastRefresh = lastBackgroundRefresh.get(cacheKey) || 0;
+  const refreshKey = `${cacheScope}:${cacheKey}`;
+  if (backgroundRefreshes.has(refreshKey)) return;
+  const lastRefresh = lastBackgroundRefresh.get(refreshKey) || 0;
   if (Date.now() - lastRefresh < 15 * 1000) return;
 
-  backgroundRefreshes.add(cacheKey);
-  lastBackgroundRefresh.set(cacheKey, Date.now());
+  backgroundRefreshes.add(refreshKey);
+  lastBackgroundRefresh.set(refreshKey, Date.now());
   requestGet(url, { ...config, _offlineCacheKey: cacheKey, _offlineCacheScope: cacheScope })
     .catch(() => {})
-    .finally(() => backgroundRefreshes.delete(cacheKey));
+    .finally(() => backgroundRefreshes.delete(refreshKey));
 }
 
 api.get = (url, config = {}) => {
@@ -85,6 +86,7 @@ api.get = (url, config = {}) => {
 // Interceptor: agregar JWT a cada request
 api.interceptors.request.use((config) => {
   config._offlineCacheScope = config._offlineCacheScope || offlineService.getUserScope();
+  config._offlineCacheGeneration = config._offlineCacheGeneration ?? offlineService.getCacheGeneration();
   const token = getStoredAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -115,7 +117,8 @@ api.interceptors.response.use(
       offlineService.cacheData(
         response.config._offlineCacheKey || response.config.url,
         response.data,
-        response.config._offlineCacheScope
+        response.config._offlineCacheScope,
+        response.config._offlineCacheGeneration
       );
     } else if (method && method !== 'get'
       && response.config._offlineCacheScope === offlineService.getUserScope()) {
