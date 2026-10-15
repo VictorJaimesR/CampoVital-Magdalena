@@ -3,7 +3,10 @@ import { offlineService } from '../services/offlineService';
 import { getStoredAuthToken, getStoredAuthUser } from '../services/authStorage';
 
 const API_BASE = '/api';
-const API_CACHE_MAX_AGE_MS = 60 * 1000;
+const API_CACHE_FRESH_MS = 30 * 1000;
+const API_CACHE_STALE_MAX_AGE_MS = 5 * 60 * 1000;
+const backgroundRefreshes = new Set();
+const lastBackgroundRefresh = new Map();
 
 function buildCacheKey(url, params) {
   if (!params) return url;
@@ -41,13 +44,31 @@ const api = axios.create({
 // Reutilizar respuestas GET recientes al volver a un módulo. Las escrituras
 // invalidan el caché; una respuesta cacheada nunca extiende la sesión del JWT.
 const requestGet = api.get.bind(api);
+function refreshCacheInBackground(url, config, cacheKey) {
+  if (backgroundRefreshes.has(cacheKey)) return;
+  const lastRefresh = lastBackgroundRefresh.get(cacheKey) || 0;
+  if (Date.now() - lastRefresh < 15 * 1000) return;
+
+  backgroundRefreshes.add(cacheKey);
+  lastBackgroundRefresh.set(cacheKey, Date.now());
+  requestGet(url, { ...config, _offlineCacheKey: cacheKey })
+    .catch(() => {})
+    .finally(() => backgroundRefreshes.delete(cacheKey));
+}
+
 api.get = (url, config = {}) => {
   const cacheKey = buildCacheKey(url, config.params);
-  if (hasUnexpiredToken()) {
-    const cached = offlineService.getCachedData(cacheKey, API_CACHE_MAX_AGE_MS);
-    if (cached !== null) {
+  const cacheableResponse = config.responseType !== 'blob' && config.responseType !== 'arraybuffer';
+
+  if (cacheableResponse && hasUnexpiredToken()) {
+    const cached = offlineService.getCachedEntry(cacheKey);
+    if (cached && Date.now() - cached.timestamp <= API_CACHE_STALE_MAX_AGE_MS) {
+      if (Date.now() - cached.timestamp > API_CACHE_FRESH_MS) {
+        refreshCacheInBackground(url, config, cacheKey);
+      }
+
       return Promise.resolve({
-        data: cached,
+        data: cached.data,
         status: 200,
         statusText: 'OK',
         headers: {},
