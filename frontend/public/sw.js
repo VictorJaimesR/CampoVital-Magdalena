@@ -1,58 +1,87 @@
-// ==============================================================================
-// AgroSmart Magdalena — Service Worker (PWA ligera)
-// Estrategia: Cache-first para assets estáticos, Network-first para API
-// ==============================================================================
+// Service worker de CampoVital: prioriza la versión más reciente de la aplicación.
+const CACHE_NAME = 'campovital-cache-v2';
+const STATIC_ASSETS = ['/manifest.json'];
 
-const CACHE_NAME = 'agrosmart-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-];
-
-// Instalación: cachear assets estáticos
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
-// Activación: limpiar caches anteriores
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Fetch: Network-first para API, Cache-first para assets
+async function guardarRespuesta(request, response) {
+  if (!response || !response.ok) return response;
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(request, response.clone());
+  return response;
+}
+
+async function cargarPagina(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+      await cache.put('/index.html', response.clone());
+    }
+    return response;
+  } catch {
+    return (await caches.match(request))
+      || (await caches.match('/index.html'))
+      || (await caches.match('/'))
+      || Response.error();
+  }
+}
+
+async function cargarRecurso(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (response.ok && new URL(request.url).origin === self.location.origin) {
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+async function cargarApi(request) {
+  try {
+    return await guardarRespuesta(request, await fetch(request));
+  } catch {
+    return (await caches.match(request)) || Response.error();
+  }
+}
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.url.includes('/api/')) {
-    // No cachear métodos que no sean GET. Network-first para GET API.
-    if (request.method !== 'GET') {
-      event.respondWith(fetch(request));
-      return;
-    }
-    // Network-first para llamadas GET al backend
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => caches.match(request))
-    );
-  } else {
-    // Cache-first para assets estáticos
-    event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
-    );
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(cargarApi(request));
+    return;
   }
+
+  if (request.mode === 'navigate') {
+    event.respondWith(cargarPagina(request));
+    return;
+  }
+
+  event.respondWith(cargarRecurso(request));
 });
