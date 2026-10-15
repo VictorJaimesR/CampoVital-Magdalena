@@ -12,8 +12,8 @@ function storageKey() {
   return `${PENDING_KEY}_${activeScope}`;
 }
 
-function cacheStorageKey(key) {
-  return `${CACHE_KEY}${activeScope}_${encodeURIComponent(key)}`;
+function cacheStorageKey(key, scope = activeScope) {
+  return `${CACHE_KEY}${scope}_${encodeURIComponent(key)}`;
 }
 
 function readJson(key, fallback) {
@@ -66,6 +66,10 @@ function replaceLocalReferences(op, resolvedIds) {
 }
 
 export const offlineService = {
+  getUserScope() {
+    return activeScope;
+  },
+
   setUserScope(userId) {
     activeScope = userId ? `user_${userId}` : 'anonymous';
 
@@ -163,16 +167,18 @@ export const offlineService = {
   },
 
   // --- Cache de datos recientes ---
-  invalidateCache() {
-    const prefix = `${CACHE_KEY}${activeScope}_`;
+  invalidateCache(scope = activeScope) {
+    if (scope !== activeScope) return;
+    const prefix = `${CACHE_KEY}${scope}_`;
     Object.keys(localStorage)
       .filter((key) => key.startsWith(prefix))
       .forEach((key) => localStorage.removeItem(key));
   },
 
-  cacheData(key, data) {
+  cacheData(key, data, scope = activeScope) {
+    if (scope !== activeScope) return;
     try {
-      localStorage.setItem(cacheStorageKey(key), JSON.stringify({
+      localStorage.setItem(cacheStorageKey(key, scope), JSON.stringify({
         data,
         timestamp: Date.now(),
       }));
@@ -182,9 +188,10 @@ export const offlineService = {
     }
   },
 
-  getCachedEntry(key) {
+  getCachedEntry(key, scope = activeScope) {
+    if (scope !== activeScope) return null;
     try {
-      const raw = localStorage.getItem(cacheStorageKey(key));
+      const raw = localStorage.getItem(cacheStorageKey(key, scope));
       if (!raw) return null;
       const entry = JSON.parse(raw);
       if (!entry || typeof entry.timestamp !== 'number' || !('data' in entry)) return null;
@@ -192,8 +199,8 @@ export const offlineService = {
     } catch { return null; }
   },
 
-  getCachedData(key, maxAgeMs = 30 * 60 * 1000) { // 30 min default
-    const entry = this.getCachedEntry(key);
+  getCachedData(key, maxAgeMs = 30 * 60 * 1000, scope = activeScope) { // 30 min default
+    const entry = this.getCachedEntry(key, scope);
     if (!entry || Date.now() - entry.timestamp > maxAgeMs) return null;
     return entry.data;
   },
