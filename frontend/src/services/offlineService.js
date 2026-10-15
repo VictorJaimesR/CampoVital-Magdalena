@@ -7,6 +7,7 @@ const PENDING_KEY = 'agrosmart_pending_ops';
 const CACHE_KEY = 'agrosmart_cache_';
 
 let activeScope = 'anonymous';
+let cacheGeneration = 0;
 
 function storageKey() {
   return `${PENDING_KEY}_${activeScope}`;
@@ -68,6 +69,10 @@ function replaceLocalReferences(op, resolvedIds) {
 export const offlineService = {
   getUserScope() {
     return activeScope;
+  },
+
+  getCacheGeneration() {
+    return cacheGeneration;
   },
 
   setUserScope(userId) {
@@ -169,14 +174,15 @@ export const offlineService = {
   // --- Cache de datos recientes ---
   invalidateCache(scope = activeScope) {
     if (scope !== activeScope) return;
+    cacheGeneration += 1;
     const prefix = `${CACHE_KEY}${scope}_`;
     Object.keys(localStorage)
       .filter((key) => key.startsWith(prefix))
       .forEach((key) => localStorage.removeItem(key));
   },
 
-  cacheData(key, data, scope = activeScope) {
-    if (scope !== activeScope) return;
+  cacheData(key, data, scope = activeScope, generation = cacheGeneration) {
+    if (scope !== activeScope || generation !== cacheGeneration) return;
     try {
       localStorage.setItem(cacheStorageKey(key, scope), JSON.stringify({
         data,
