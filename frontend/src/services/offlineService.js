@@ -182,14 +182,20 @@ export const offlineService = {
     }
   },
 
-  getCachedData(key, maxAgeMs = 30 * 60 * 1000) { // 30 min default
+  getCachedEntry(key) {
     try {
       const raw = localStorage.getItem(cacheStorageKey(key));
       if (!raw) return null;
-      const { data, timestamp } = JSON.parse(raw);
-      if (Date.now() - timestamp > maxAgeMs) return null;
-      return data;
+      const entry = JSON.parse(raw);
+      if (!entry || typeof entry.timestamp !== 'number' || !('data' in entry)) return null;
+      return entry;
     } catch { return null; }
+  },
+
+  getCachedData(key, maxAgeMs = 30 * 60 * 1000) { // 30 min default
+    const entry = this.getCachedEntry(key);
+    if (!entry || Date.now() - entry.timestamp > maxAgeMs) return null;
+    return entry.data;
   },
 
   clearOldCache() {
