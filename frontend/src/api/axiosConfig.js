@@ -3,12 +3,62 @@ import { offlineService } from '../services/offlineService';
 import { getStoredAuthToken, getStoredAuthUser } from '../services/authStorage';
 
 const API_BASE = '/api';
+const API_CACHE_MAX_AGE_MS = 60 * 1000;
+
+function buildCacheKey(url, params) {
+  if (!params) return url;
+  if (params instanceof URLSearchParams) return `${url}::params:${params.toString()}`;
+  if (typeof params !== 'object') return `${url}::params:${String(params)}`;
+
+  const sortedParams = Object.keys(params)
+    .sort()
+    .map((key) => [key, params[key]]);
+  return `${url}::params:${JSON.stringify(sortedParams)}`;
+}
+
+function hasUnexpiredToken() {
+  const token = getStoredAuthToken();
+  if (!token) return false;
+
+  try {
+    const payload = token.split('.')[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(token.split('.')[1].length / 4) * 4, '=');
+    const claims = JSON.parse(atob(payload));
+    return typeof claims.exp === 'number' && claims.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
   timeout: 90000,
 });
+
+// Reutilizar respuestas GET recientes al volver a un módulo. Las escrituras
+// invalidan el caché; una respuesta cacheada nunca extiende la sesión del JWT.
+const requestGet = api.get.bind(api);
+api.get = (url, config = {}) => {
+  const cacheKey = buildCacheKey(url, config.params);
+  if (hasUnexpiredToken()) {
+    const cached = offlineService.getCachedData(cacheKey, API_CACHE_MAX_AGE_MS);
+    if (cached !== null) {
+      return Promise.resolve({
+        data: cached,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+        config: { ...config, baseURL: API_BASE, url, method: 'get' },
+        fromCache: true,
+      });
+    }
+  }
+
+  return requestGet(url, { ...config, _offlineCacheKey: cacheKey });
+};
 
 // Interceptor: agregar JWT a cada request
 api.interceptors.request.use((config) => {
@@ -35,9 +85,16 @@ api.interceptors.request.use((config) => {
 // Interceptor: manejar errores y cache
 api.interceptors.response.use(
   (response) => {
-    // Cachear automaticamente todas las respuestas GET exitosas
-    if (response.config.method === 'get') {
-      offlineService.cacheData(response.config.url, response.data);
+    const method = response.config.method?.toLowerCase();
+
+    // Cachear solo GET JSON exitosos y borrar lecturas tras cualquier escritura.
+    if (method === 'get' && response.config.responseType !== 'blob' && response.config.responseType !== 'arraybuffer') {
+      offlineService.cacheData(
+        response.config._offlineCacheKey || response.config.url,
+        response.data
+      );
+    } else if (method && method !== 'get') {
+      offlineService.invalidateCache();
     }
     return response;
   },
@@ -47,10 +104,21 @@ api.interceptors.response.use(
       window.dispatchEvent(new Event('auth:unauthorized'));
     }
     // Fallback offline para GET (Network Error o timeout)
-    if ((!error.response || error.code === 'ERR_NETWORK') && error.config.method === 'get') {
-      const cached = offlineService.getCachedData(error.config.url);
-      if (cached) {
-        return Promise.resolve({ data: cached, status: 200, fromCache: true });
+    const requestConfig = error.config;
+    if ((!error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')
+      && requestConfig?.method === 'get') {
+      const cached = offlineService.getCachedData(
+        requestConfig._offlineCacheKey || requestConfig.url
+      );
+      if (cached !== null) {
+        return Promise.resolve({
+          data: cached,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+          config: requestConfig,
+          fromCache: true,
+        });
       }
     }
     return Promise.reject(error);
