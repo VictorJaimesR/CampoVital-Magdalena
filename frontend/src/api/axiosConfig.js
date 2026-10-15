@@ -84,7 +84,7 @@ api.get = (url, config = {}) => {
 
 // Interceptor: agregar JWT a cada request
 api.interceptors.request.use((config) => {
-  config._offlineCacheScope = offlineService.getUserScope();
+  config._offlineCacheScope = config._offlineCacheScope || offlineService.getUserScope();
   const token = getStoredAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -124,12 +124,14 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401) {
+    const requestConfig = error.config;
+    if (error.response?.status === 401
+      && (!requestConfig?._offlineCacheScope
+        || requestConfig._offlineCacheScope === offlineService.getUserScope())) {
       // Disparar evento para que AuthContext haga el logout limpio
       window.dispatchEvent(new Event('auth:unauthorized'));
     }
     // Fallback offline para GET (Network Error o timeout)
-    const requestConfig = error.config;
     if ((!error.response || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED')
       && requestConfig?.method === 'get') {
       const cached = offlineService.getCachedData(
