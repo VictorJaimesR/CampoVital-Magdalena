@@ -12,6 +12,10 @@ function storageKey() {
   return `${PENDING_KEY}_${activeScope}`;
 }
 
+function cacheStorageKey(key) {
+  return `${CACHE_KEY}${activeScope}_${encodeURIComponent(key)}`;
+}
+
 function readJson(key, fallback) {
   try {
     return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
@@ -94,6 +98,7 @@ export const offlineService = {
       lastError: null,
     });
     writePendingOps(ops);
+    this.invalidateCache();
     return { clientId, localId, data };
   },
 
@@ -153,13 +158,21 @@ export const offlineService = {
       .filter(Boolean);
 
     writePendingOps(nextOps);
+    if (synced > 0) this.invalidateCache();
     return { synced, failed, remaining: nextOps.length };
   },
 
   // --- Cache de datos recientes ---
+  invalidateCache() {
+    const prefix = `${CACHE_KEY}${activeScope}_`;
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(prefix))
+      .forEach((key) => localStorage.removeItem(key));
+  },
+
   cacheData(key, data) {
     try {
-      localStorage.setItem(CACHE_KEY + key, JSON.stringify({
+      localStorage.setItem(cacheStorageKey(key), JSON.stringify({
         data,
         timestamp: Date.now(),
       }));
@@ -171,7 +184,7 @@ export const offlineService = {
 
   getCachedData(key, maxAgeMs = 30 * 60 * 1000) { // 30 min default
     try {
-      const raw = localStorage.getItem(CACHE_KEY + key);
+      const raw = localStorage.getItem(cacheStorageKey(key));
       if (!raw) return null;
       const { data, timestamp } = JSON.parse(raw);
       if (Date.now() - timestamp > maxAgeMs) return null;
