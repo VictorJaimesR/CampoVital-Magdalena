@@ -7,9 +7,14 @@ const PENDING_KEY = 'agrosmart_pending_ops';
 const CACHE_KEY = 'agrosmart_cache_';
 
 let activeScope = 'anonymous';
+let cacheGeneration = 0;
 
 function storageKey() {
   return `${PENDING_KEY}_${activeScope}`;
+}
+
+function cacheStorageKey(key, scope = activeScope) {
+  return `${CACHE_KEY}${scope}_${encodeURIComponent(key)}`;
 }
 
 function readJson(key, fallback) {
@@ -62,6 +67,14 @@ function replaceLocalReferences(op, resolvedIds) {
 }
 
 export const offlineService = {
+  getUserScope() {
+    return activeScope;
+  },
+
+  getCacheGeneration() {
+    return cacheGeneration;
+  },
+
   setUserScope(userId) {
     activeScope = userId ? `user_${userId}` : 'anonymous';
 
@@ -94,6 +107,7 @@ export const offlineService = {
       lastError: null,
     });
     writePendingOps(ops);
+    this.invalidateCache();
     return { clientId, localId, data };
   },
 
@@ -153,13 +167,24 @@ export const offlineService = {
       .filter(Boolean);
 
     writePendingOps(nextOps);
+    if (synced > 0) this.invalidateCache();
     return { synced, failed, remaining: nextOps.length };
   },
 
   // --- Cache de datos recientes ---
-  cacheData(key, data) {
+  invalidateCache(scope = activeScope) {
+    if (scope !== activeScope) return;
+    cacheGeneration += 1;
+    const prefix = `${CACHE_KEY}${scope}_`;
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith(prefix))
+      .forEach((key) => localStorage.removeItem(key));
+  },
+
+  cacheData(key, data, scope = activeScope, generation = cacheGeneration) {
+    if (scope !== activeScope || generation !== cacheGeneration) return;
     try {
-      localStorage.setItem(CACHE_KEY + key, JSON.stringify({
+      localStorage.setItem(cacheStorageKey(key, scope), JSON.stringify({
         data,
         timestamp: Date.now(),
       }));
@@ -169,14 +194,21 @@ export const offlineService = {
     }
   },
 
-  getCachedData(key, maxAgeMs = 30 * 60 * 1000) { // 30 min default
+  getCachedEntry(key, scope = activeScope) {
+    if (scope !== activeScope) return null;
     try {
-      const raw = localStorage.getItem(CACHE_KEY + key);
+      const raw = localStorage.getItem(cacheStorageKey(key, scope));
       if (!raw) return null;
-      const { data, timestamp } = JSON.parse(raw);
-      if (Date.now() - timestamp > maxAgeMs) return null;
-      return data;
+      const entry = JSON.parse(raw);
+      if (!entry || typeof entry.timestamp !== 'number' || !('data' in entry)) return null;
+      return entry;
     } catch { return null; }
+  },
+
+  getCachedData(key, maxAgeMs = 30 * 60 * 1000, scope = activeScope) { // 30 min default
+    const entry = this.getCachedEntry(key, scope);
+    if (!entry || Date.now() - entry.timestamp > maxAgeMs) return null;
+    return entry.data;
   },
 
   clearOldCache() {
