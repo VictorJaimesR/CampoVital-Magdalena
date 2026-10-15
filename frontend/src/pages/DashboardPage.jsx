@@ -27,6 +27,7 @@ export default function DashboardPage() {
     try {
       let totalFincas = 0;
       let cultivosActivos = 0;
+      let cultivos = [];
       let municipiosFinca = [];
       let alertasActivas = 0;
       let recomendacionesPendientes = 0;
@@ -43,7 +44,8 @@ export default function DashboardPage() {
         // Cultivos
         try {
           const cultivosRes = await cultivoService.listarPorProductor(user.productorId, 0);
-          cultivosActivos = cultivosRes.data?.datos?.totalElements || 0;
+          cultivos = cultivosRes.data?.datos?.content || [];
+          cultivosActivos = cultivosRes.data?.datos?.totalElements || cultivos.length;
         } catch (err) { console.error('Error loading cultivos:', err); }
 
         // Alertas filtradas por municipios del agricultor
@@ -67,8 +69,6 @@ export default function DashboardPage() {
 
         // Recomendaciones pendientes
         try {
-          const cultivosRes = await cultivoService.listarPorProductor(user.productorId, 0);
-          const cultivos = cultivosRes.data?.datos?.content || [];
           const cultivoIds = cultivos.map(c => c.id);
           if (cultivoIds.length > 0) {
             const recoRes = await recomendacionService.listarPorCultivos(cultivoIds, 0);
