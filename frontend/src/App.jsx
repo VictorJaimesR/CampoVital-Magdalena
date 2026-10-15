@@ -49,7 +49,14 @@ export default function App() {
   const { isOnline, showBanner } = useOnlineStatus();
   const { toasts } = useToast();
 
-  if (initializing) return null;
+  if (initializing) {
+    return (
+      <main className="loading-container" role="status" aria-live="polite">
+        <div className="spinner-agro" aria-hidden="true"></div>
+        <p className="text-muted mb-0">Preparando CampoVital…</p>
+      </main>
+    );
+  }
 
   return (
     <>

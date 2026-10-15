@@ -9,12 +9,12 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './index.css';
 
-// Registrar Service Worker para PWA
+// Registrar y comprobar actualizaciones de la PWA sin reutilizar la copia HTTP del service worker.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(() => console.log('SW registrado'))
-      .catch((err) => console.log('SW error:', err));
+    navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' })
+      .then((registration) => registration.update())
+      .catch((err) => console.log('No se pudo actualizar el service worker:', err));
   });
 }
 
