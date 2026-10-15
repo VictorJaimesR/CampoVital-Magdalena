@@ -15,7 +15,7 @@ export default function Navbar() {
     <nav className="navbar navbar-expand-lg navbar-agro sticky-top">
       <div className="container-fluid">
         <Link className="navbar-brand" to="/dashboard">
-          <span>🌱</span> AgroSmart
+          <span>🌱</span> CampoVital
         </Link>
 
         <div className="d-flex align-items-center gap-2 d-lg-none">
